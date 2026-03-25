@@ -3,14 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pilot Cockpit Learning Game - Advanced</title>
+<title>Full Cockpit Flight Simulator</title>
 <style>
-body { margin:0; font-family: Arial, sans-serif; background: #333; color: #fff; }
+body { margin:0; font-family: Arial, sans-serif; background:#333; color:#fff; }
 #cockpit { display:flex; justify-content:space-between; padding:10px; }
-#controls, #info, #settings { width: 20%; background: rgba(0,0,0,0.7); padding:10px; border-radius:8px; }
-#instruments { width: 40%; text-align:center; }
+#controls,#settings,#info { width:20%; background:rgba(0,0,0,0.7); padding:10px; border-radius:8px; }
+#instruments { width:40%; text-align:center; }
+canvas { display:block; margin:0 auto; border:1px solid #000; }
+h2 { margin:5px 0; }
 button,input[type=range],select { width:100%; margin:5px 0; }
-canvas { display:block; margin:0 auto; background:#87CEEB; border:1px solid #000; }
 .panel { margin-top:10px; padding:5px; border-top:1px solid #ccc; color:#fff; }
 </style>
 </head>
@@ -18,18 +19,20 @@ canvas { display:block; margin:0 auto; background:#87CEEB; border:1px solid #000
 
 <div id="cockpit">
   <div id="controls">
-    <h2>Controls</h2>
+    <h2>Flight Controls</h2>
     <label>Throttle <span id="throttleDisplay">0</span>%</label>
     <input type="range" id="throttle" min="0" max="100" value="0">
-
     <label>Flaps <span id="flapsDisplay">0</span>°</label>
     <input type="range" id="flaps" min="0" max="30" value="0">
-
     <label>Yoke Pitch</label>
     <input type="range" id="pitchControl" min="-15" max="15" value="0">
-
     <label>Yoke Bank</label>
     <input type="range" id="bankControl" min="-30" max="30" value="0">
+    <label>Landing Gear</label>
+    <select id="gearControl">
+      <option value="up">Up</option>
+      <option value="down">Down</option>
+    </select>
   </div>
 
   <div id="instruments">
@@ -46,62 +49,56 @@ canvas { display:block; margin:0 auto; background:#87CEEB; border:1px solid #000
 
   <div id="settings">
     <h2>Settings</h2>
-    <label>Day/Night Mode</label>
-    <select id="dayNight">
-      <option value="day">Day</option>
-      <option value="night">Night</option>
-    </select>
-
+    <label>Day/Night</label>
+    <select id="dayNight"><option value="day">Day</option><option value="night">Night</option></select>
     <label>Wind (0–20 knots)</label>
     <input type="range" id="wind" min="0" max="20" value="0">
-
     <label>Radar</label>
-    <select id="radarToggle">
-      <option value="on">On</option>
-      <option value="off">Off</option>
-    </select>
+    <select id="radarToggle"><option value="on">On</option><option value="off">Off</option></select>
+    <label>Aircraft Type</label>
+    <select id="aircraftType"><option value="C172">Cessna 172</option><option value="SR22">Cirrus SR22</option></select>
   </div>
 
   <div id="info">
     <h2>Study Info</h2>
-    <p id="studyInfo">Hover over controls for info.</p>
+    <p id="studyInfo">Hover over controls for FAA guidance.</p>
   </div>
 </div>
 
 <canvas id="world" width="800" height="400"></canvas>
 
 <script>
-let throttle = 0, flaps = 0, pitch = 0, bank = 0;
-let altitude = 1000, speed = 0;
-let wind = 0, dayNight = 'day', radarOn = true;
+let throttle=0, flaps=0, pitch=0, bank=0, altitude=1000, speed=0, wind=0;
+let dayNight='day', radarOn=true, gear='up', aircraft='C172';
 
-// Buildings & clouds
-const buildings = Array.from({length: 20}, () => ({x: Math.random()*800, y: 300 + Math.random()*50, w: 20+Math.random()*30, h: 50+Math.random()*100}));
-const clouds = Array.from({length: 10}, () => ({x: Math.random()*800, y: 50+Math.random()*100, w: 50+Math.random()*50, h: 20+Math.random()*20}));
+// Buildings and clouds
+const buildings=Array.from({length:20},()=>({x:Math.random()*800,y:300+Math.random()*50,w:20+Math.random()*30,h:50+Math.random()*100}));
+const clouds=Array.from({length:10},()=>({x:Math.random()*800,y:50+Math.random()*100,w:50+Math.random()*50,h:20+Math.random()*20}));
 
 // Study data
-const studyData = {
-  throttle: "Throttle: Controls engine power, affects climb and speed. Ref: FAA PHAK Ch.4",
-  flaps: "Flaps: Increase lift & drag for slow flight, takeoff & landing. Ref: FAA PHAK Ch.5",
-  pitchControl: "Yoke Pitch: Controls aircraft nose up/down. Ref: FAA PHAK Ch.3",
-  bankControl: "Yoke Bank: Controls roll/turn. Ref: FAA PHAK Ch.3",
-  dayNight: "Toggle day/night for visibility practice. Ref: FAA PHAK Ch.9",
-  wind: "Wind affects aircraft ground track. Ref: FAA PHAK Ch.8",
-  radarToggle: "Radar shows nearby terrain and clouds. Ref: FAA PHAK Ch.7"
+const studyData={
+  throttle:"Throttle: Controls engine power, affects climb & speed. Ref: FAA PHAK Ch.4",
+  flaps:"Flaps: Increase lift/drag for slow flight & landing. Ref: FAA PHAK Ch.5",
+  pitchControl:"Yoke Pitch: Nose up/down. Ref: FAA PHAK Ch.3",
+  bankControl:"Yoke Bank: Roll/turn. Ref: FAA PHAK Ch.3",
+  gearControl:"Landing Gear: Up/Down affects drag & landing. Ref: FAA PHAK Ch.5",
+  dayNight:"Toggle day/night for visibility. Ref: FAA PHAK Ch.9",
+  wind:"Wind affects ground track. Ref: FAA PHAK Ch.8",
+  radarToggle:"Radar shows terrain & clouds. Ref: FAA PHAK Ch.7",
+  aircraftType:"Select aircraft type. Affects speed & climb. Ref: FAA PHAK Ch.2"
 };
 
 function updateUI(){
-  document.getElementById('throttleDisplay').innerText = throttle;
-  document.getElementById('flapsDisplay').innerText = flaps;
-  document.getElementById('altitude').innerText = altitude.toFixed(0);
-  document.getElementById('speed').innerText = speed.toFixed(0);
-  document.getElementById('pitch').innerText = pitch;
-  document.getElementById('bank').innerText = bank;
+  document.getElementById('throttleDisplay').innerText=throttle;
+  document.getElementById('flapsDisplay').innerText=flaps;
+  document.getElementById('altitude').innerText=altitude.toFixed(0);
+  document.getElementById('speed').innerText=speed.toFixed(0);
+  document.getElementById('pitch').innerText=pitch;
+  document.getElementById('bank').innerText=bank;
 }
 
-// Controls events
-['throttle','flaps','pitchControl','bankControl','wind','dayNight','radarToggle'].forEach(id=>{
-  const el = document.getElementById(id);
+['throttle','flaps','pitchControl','bankControl','gearControl','dayNight','wind','radarToggle','aircraftType'].forEach(id=>{
+  const el=document.getElementById(id);
   el.addEventListener('input',()=>{ 
     if(id==='throttle') throttle=+el.value;
     if(id==='flaps') flaps=+el.value;
@@ -110,97 +107,71 @@ function updateUI(){
     if(id==='wind') wind=+el.value;
     updateUI();
   });
-  el.addEventListener('change',()=>{ 
+  el.addEventListener('change',()=>{
     if(id==='dayNight') dayNight=el.value;
     if(id==='radarToggle') radarOn=el.value==='on';
+    if(id==='gearControl') gear=el.value;
+    if(id==='aircraftType') aircraft=el.value;
   });
   el.addEventListener('mouseover',()=>{document.getElementById('studyInfo').innerText=studyData[id];});
-  el.addEventListener('mouseout',()=>{document.getElementById('studyInfo').innerText="Hover over controls for info.";});
+  el.addEventListener('mouseout',()=>{document.getElementById('studyInfo').innerText="Hover over controls for FAA guidance."});
 });
 
-// Canvas references
-const world = document.getElementById('world');
-const wctx = world.getContext('2d');
-const horizon = document.getElementById('horizon');
-const hctx = horizon.getContext('2d');
-const radar = document.getElementById('radar');
-const rctx = radar.getContext('2d');
+const world=document.getElementById('world'), wctx=world.getContext('2d');
+const horizon=document.getElementById('horizon'), hctx=horizon.getContext('2d');
+const radar=document.getElementById('radar'), rctx=radar.getContext('2d');
 
-// Horizon drawing
 function drawHorizon(){
   hctx.clearRect(0,0,horizon.width,horizon.height);
-  // sky
-  hctx.fillStyle = dayNight==='day'?'#87CEEB':'#001033';
+  hctx.fillStyle=dayNight==='day'?'#87CEEB':'#001033';
   hctx.fillRect(0,0,horizon.width,horizon.height/2 + pitch*5);
-  // ground
-  hctx.fillStyle = '#228B22';
+  hctx.fillStyle='#228B22';
   hctx.fillRect(0,horizon.height/2 + pitch*5,horizon.width,horizon.height/2 - pitch*5);
-  // plane symbol
-  hctx.strokeStyle='white';
-  hctx.lineWidth=2;
+  hctx.strokeStyle='white';hctx.lineWidth=2;
   hctx.beginPath();
-  hctx.moveTo(horizon.width/2 -20, horizon.height/2);
-  hctx.lineTo(horizon.width/2 +20, horizon.height/2);
-  hctx.moveTo(horizon.width/2, horizon.height/2 -10);
-  hctx.lineTo(horizon.width/2, horizon.height/2 +10);
+  hctx.moveTo(horizon.width/2-20,horizon.height/2);
+  hctx.lineTo(horizon.width/2+20,horizon.height/2);
+  hctx.moveTo(horizon.width/2,horizon.height/2-10);
+  hctx.lineTo(horizon.width/2,horizon.height/2+10);
   hctx.stroke();
 }
 
-// World drawing
 function drawWorld(){
   wctx.clearRect(0,0,world.width,world.height);
-  // background sky
-  wctx.fillStyle = dayNight==='day'?'#87CEEB':'#001033';
+  wctx.fillStyle=dayNight==='day'?'#87CEEB':'#001033';
   wctx.fillRect(0,0,world.width,world.height);
-  // clouds
   clouds.forEach(c=>{
-    c.x -= 0.5; if(c.x+c.w<0) c.x=world.width;
-    wctx.fillStyle='white';
-    wctx.fillRect(c.x,c.y,c.w,c.h);
+    c.x-=0.5 + wind*0.1; if(c.x+c.w<0) c.x=world.width;
+    wctx.fillStyle='white'; wctx.fillRect(c.x,c.y,c.w,c.h);
   });
-  // buildings
   buildings.forEach(b=>{
-    const bx = (b.x - world.width/2) + world.width/2;
-    wctx.fillStyle='#555';
-    wctx.fillRect(bx,b.y,b.w,b.h);
+    const bx=(b.x-world.width/2)+world.width/2; wctx.fillStyle='#555'; wctx.fillRect(bx,b.y,b.w,b.h);
   });
-  // airplane marker
-  wctx.fillStyle='red';
-  wctx.beginPath();
-  wctx.arc(world.width/2, world.height/2, 5,0,2*Math.PI);
-  wctx.fill();
+  wctx.fillStyle='red'; wctx.beginPath(); wctx.arc(world.width/2,world.height/2,5,0,2*Math.PI); wctx.fill();
 }
 
-// Radar drawing
 function drawRadar(){
   rctx.clearRect(0,0,radar.width,radar.height);
   if(!radarOn) return;
-  rctx.fillStyle='black';
-  rctx.fillRect(0,0,radar.width,radar.height);
-  // radar points for clouds
+  rctx.fillStyle='black'; rctx.fillRect(0,0,radar.width,radar.height);
   clouds.forEach(c=>{
-    const x = radar.width/2 + (c.x-world.width/2)/4;
-    const y = radar.height/2 + (c.y-world.height/2)/4;
-    rctx.fillStyle='white';
-    rctx.fillRect(x,y,2,2);
+    const x=radar.width/2+(c.x-world.width/2)/4;
+    const y=radar.height/2+(c.y-world.height/2)/4;
+    rctx.fillStyle='white'; rctx.fillRect(x,y,2,2);
   });
-  // radar points for buildings
   buildings.forEach(b=>{
-    const x = radar.width/2 + (b.x-world.width/2)/4;
-    const y = radar.height/2 + (b.y-world.height/2)/4;
-    rctx.fillStyle='gray';
-    rctx.fillRect(x,y,2,2);
+    const x=radar.width/2+(b.x-world.width/2)/4;
+    const y=radar.height/2+(b.y-world.height/2)/4;
+    rctx.fillStyle='gray'; rctx.fillRect(x,y,2,2);
   });
-  // plane center
-  rctx.fillStyle='red';
-  rctx.fillRect(radar.width/2-2,radar.height/2-2,4,4);
+  rctx.fillStyle='red'; rctx.fillRect(radar.width/2-2,radar.height/2-2,4,4);
 }
 
-// Simulation loop
 function simulate(){
-  speed = throttle*1.5 - flaps*0.5;
-  altitude += (speed/60) * Math.sin(pitch*Math.PI/180);
-  altitude = Math.max(0, altitude);
+  speed=throttle*1.5 - flaps*0.5;
+  if(gear==='down') speed*=0.95;
+  altitude+=(speed/60)*Math.sin(pitch*Math.PI/180);
+  altitude=Math.max(0,altitude);
   updateUI();
   drawHorizon();
   drawWorld();
