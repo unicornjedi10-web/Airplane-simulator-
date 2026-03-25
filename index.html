@@ -3,201 +3,150 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Full Flight Cockpit Game</title>
+<title>HTML Flight Simulator</title>
 <style>
-  body, html { margin:0; padding:0; font-family:Arial,sans-serif; background:#000; overflow:hidden; }
-  #gameContainer { display:flex; flex-direction:column; width:100vw; height:100vh; }
-  #menu, #settingsPanel { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10; }
-  #menu button, #settingsPanel button, select { margin:10px; padding:10px 20px; font-size:16px; cursor:pointer; }
-  #cockpitContainer { display:flex; flex:1; width:100%; flex-wrap:wrap; }
-  #controls, #settings, #info { flex:1 1 20%; min-width:180px; background:rgba(0,0,0,0.7); padding:10px; color:white; overflow-y:auto; max-height:100vh; }
-  #instruments { flex:1 1 40%; text-align:center; min-width:250px; }
-  canvas { display:block; margin:0 auto; border:1px solid #000; }
-  h2 { margin:5px 0; }
-  label,input[type=range]{ width:100%; margin:5px 0; }
-  .panel { margin-top:10px; padding:5px; border-top:1px solid #ccc; }
-  @media (max-width:800px){ #cockpitContainer{flex-direction:column;} }
+  body { margin: 0; font-family: sans-serif; overflow: hidden; background: #87ceeb; }
+  #gameCanvas { display: block; background: #87ceeb; }
+  #ui { position: absolute; top: 10px; left: 10px; color: white; }
+  .menu { background: rgba(0,0,0,0.6); padding: 10px; margin-bottom: 10px; border-radius: 8px; }
+  button { margin: 5px; padding: 5px 10px; }
 </style>
 </head>
 <body>
 
-<!-- Start Menu -->
-<div id="menu">
-  <h1>Flight Cockpit Game</h1>
-  <button id="startGame">Start Flight</button>
-  <button id="openSettings">Settings</button>
-</div>
+<canvas id="gameCanvas"></canvas>
 
-<!-- Settings Panel -->
-<div id="settingsPanel" style="display:none;">
-  <h2>Settings</h2>
-  <label>Day/Night Mode</label>
-  <select id="menuDayNight"><option value="day">Day</option><option value="night">Night</option></select>
-  <label>Wind (0–20 knots)</label>
-  <input type="range" id="menuWind" min="0" max="20" value="0">
-  <label>Radar</label>
-  <select id="menuRadar"><option value="on">On</option><option value="off">Off</option></select>
-  <button id="closeSettings">Back</button>
-</div>
+<div id="ui">
+  <div class="menu">
+    <h3>Settings</h3>
+    Weather: 
+    <select id="weatherSelect">
+      <option value="clear">Clear</option>
+      <option value="cloudy">Cloudy</option>
+      <option value="rain">Rain</option>
+    </select>
+    Time: 
+    <select id="timeSelect">
+      <option value="day">Day</option>
+      <option value="night">Night</option>
+    </select>
+    <button onclick="toggleFOV()">Toggle FOV Mode</button>
+  </div>
 
-<!-- Game Container -->
-<div id="gameContainer" style="display:none;">
-  <div id="cockpitContainer">
-    <!-- Controls -->
-    <div id="controls">
-      <h2>Flight Controls</h2>
-      <label>Throttle <span id="throttleDisplay">0</span>%</label>
-      <input type="range" id="throttle" min="0" max="100" value="0">
-      <label>Flaps <span id="flapsDisplay">0</span>°</label>
-      <input type="range" id="flaps" min="0" max="30" value="0">
-      <label>Pitch</label>
-      <input type="range" id="pitchControl" min="-15" max="15" value="0">
-      <label>Bank</label>
-      <input type="range" id="bankControl" min="-30" max="30" value="0">
-      <label>Landing Gear</label>
-      <select id="gearControl"><option value="up">Up</option><option value="down">Down</option></select>
-      <label>FOV Mode (Night)</label>
-      <select id="fovMode"><option value="off">Off</option><option value="on">On</option></select>
-    </div>
+  <div class="menu">
+    <h3>Cockpit Info</h3>
+    <button onclick="showInfo()">Show Controls</button>
+  </div>
 
-    <!-- Instruments -->
-    <div id="instruments">
-      <h2>Instruments</h2>
-      <canvas id="horizon" width="200" height="200"></canvas>
-      <canvas id="radar" width="120" height="120" style="margin-top:5px;"></canvas>
-      <canvas id="world" width="400" height="200" style="margin-top:5px;"></canvas>
-      <div class="panel">
-        <p>Altitude: <span id="altitude">1000</span> ft</p>
-        <p>Speed: <span id="speed">0</span> knots</p>
-        <p>Pitch: <span id="pitch">0</span>°</p>
-        <p>Bank: <span id="bank">0</span>°</p>
-      </div>
-    </div>
-
-    <!-- Info / Study Panel -->
-    <div id="settings">
-      <h2>Study Info</h2>
-      <p id="studyInfo">Hover over controls for FAA guidance.</p>
-    </div>
+  <div class="menu">
+    <h3>Status</h3>
+    <div>Speed: <span id="speedDisplay">0</span> km/h</div>
+    <div>Altitude: <span id="altDisplay">0</span> m</div>
+    <div>Landing Gear: <span id="gearDisplay">Up</span></div>
   </div>
 </div>
 
 <script>
-// Game State
-let throttle=0, flaps=0, pitch=0, bank=0, altitude=1000, speed=0;
-let wind=0, dayNight='day', radarOn=true, gear='up', fov=false, crashed=false;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-// World objects
-const buildings=Array.from({length:15},()=>({x:Math.random()*800,y:150+Math.random()*50,w:20+Math.random()*30,h:50+Math.random()*100}));
-const clouds=Array.from({length:8},()=>({x:Math.random()*800,y:20+Math.random()*80,w:50+Math.random()*50,h:20+Math.random()*20}));
-
-// Study info
-const studyData={
-  throttle:"Throttle: Engine power. FAA PHAK Ch.4",
-  flaps:"Flaps: Lift/Drag. FAA PHAK Ch.5",
-  pitchControl:"Pitch: Nose up/down. FAA PHAK Ch.3",
-  bankControl:"Bank: Roll/turn. FAA PHAK Ch.3",
-  gearControl:"Landing Gear: Drag. FAA PHAK Ch.5",
-  fovMode:"FOV Mode: Night cockpit only.",
-  menuDayNight:"Day/Night Mode. FAA PHAK Ch.9",
-  menuWind:"Wind affects track. FAA PHAK Ch.8",
-  menuRadar:"Radar shows terrain. FAA PHAK Ch.7"
+let plane = {
+  x: canvas.width/2,
+  y: canvas.height/2,
+  speed: 0,
+  altitude: 1000,
+  angle: 0,
+  gear: 'Up'
 };
 
-// UI Elements
-const throttleEl=document.getElementById('throttle');
-const flapsEl=document.getElementById('flaps');
-const pitchEl=document.getElementById('pitchControl');
-const bankEl=document.getElementById('bankControl');
-const gearEl=document.getElementById('gearControl');
-const fovEl=document.getElementById('fovMode');
-const horizon=document.getElementById('horizon'); const hctx=horizon.getContext('2d');
-const world=document.getElementById('world'); const wctx=world.getContext('2d');
-const radar=document.getElementById('radar'); const rctx=radar.getContext('2d');
+let fovMode = false;
+let weather = 'clear';
+let timeOfDay = 'day';
 
-function updateUI(){
-  document.getElementById('throttleDisplay').innerText=throttle;
-  document.getElementById('flapsDisplay').innerText=flaps;
-  document.getElementById('altitude').innerText=altitude.toFixed(0);
-  document.getElementById('speed').innerText=speed.toFixed(0);
-  document.getElementById('pitch').innerText=pitch;
-  document.getElementById('bank').innerText=bank;
+document.getElementById('weatherSelect').addEventListener('change', e => weather = e.target.value);
+document.getElementById('timeSelect').addEventListener('change', e => timeOfDay = e.target.value);
+
+function toggleFOV() {
+  fovMode = !fovMode;
 }
 
-// Control events
-throttleEl.addEventListener('input',()=>{ throttle=+throttleEl.value; updateUI(); });
-flapsEl.addEventListener('input',()=>{ flaps=+flapsEl.value; updateUI(); });
-pitchEl.addEventListener('input',()=>{ pitch=+pitchEl.value; updateUI(); });
-bankEl.addEventListener('input',()=>{ bank=+bankEl.value; updateUI(); });
-gearEl.addEventListener('change',()=>gear=gearEl.value);
-fovEl.addEventListener('change',()=>fov=fovEl.value==='on');
+function showInfo() {
+  alert(`Cockpit Controls:
+- Throttle: Increase speed
+- Landing Gear: Up/Down
+- Radar: Shows nearby terrain/buildings
+- Altimeter: Shows altitude`);
+}
 
-// Hover study info
-[throttleEl,flapsEl,pitchEl,bankEl,gearEl,fovEl].forEach(el=>{
-  el.addEventListener('mouseover',()=>document.getElementById('studyInfo').innerText=studyData[el.id]||"Hover over controls for FAA info");
-  el.addEventListener('mouseout',()=>document.getElementById('studyInfo').innerText="Hover over controls for FAA guidance");
+// Simple crash detection
+function checkCrash() {
+  if (plane.altitude <= 0) {
+    alert('CRASH! Game Over');
+    plane.speed = 0;
+    plane.altitude = 0;
+  }
+}
+
+// Main render function
+function render() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Sky background
+  if (timeOfDay === 'day') ctx.fillStyle = weather === 'clear' ? '#87ceeb' : '#a0a0a0';
+  else ctx.fillStyle = '#0b0b2f';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Clouds
+  if(weather !== 'clear') {
+    ctx.fillStyle = 'white';
+    for(let i=0;i<5;i++){
+      ctx.beginPath();
+      ctx.arc(100+i*200,(i*80)%canvas.height,50,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // Buildings/terrain
+  ctx.fillStyle = '#555';
+  ctx.fillRect(canvas.width/2-50, canvas.height-100, 100, 100); // simple ground obstacle
+
+  // Artificial Horizon
+  ctx.save();
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.rotate(plane.angle * Math.PI / 180);
+  ctx.fillStyle = 'brown';
+  ctx.fillRect(-canvas.width/2, 100, canvas.width, 20); // ground line
+  ctx.fillStyle = 'skyblue';
+  ctx.fillRect(-canvas.width/2, -canvas.height/2, canvas.width, 100); // sky
+  ctx.restore();
+
+  // Cockpit controls
+  if(!fovMode){
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, canvas.height-150, canvas.width, 150); // cockpit panel
+    ctx.fillStyle = 'white';
+    ctx.fillText(`Throttle: ${plane.speed}`, 50, canvas.height-100);
+    ctx.fillText(`Altitude: ${plane.altitude}`, 200, canvas.height-100);
+    ctx.fillText(`Landing Gear: ${plane.gear}`, 400, canvas.height-100);
+  }
+
+  requestAnimationFrame(render);
+}
+
+render();
+
+// Simple controls
+document.addEventListener('keydown', e => {
+  if(e.key === 'ArrowUp') { plane.speed += 5; plane.altitude += 10; }
+  if(e.key === 'ArrowDown') { plane.speed -= 5; plane.altitude -= 10; }
+  if(e.key === 'ArrowLeft') plane.angle -= 2;
+  if(e.key === 'ArrowRight') plane.angle += 2;
+  if(e.key === 'g') plane.gear = plane.gear === 'Up' ? 'Down' : 'Up';
+  checkCrash();
 });
-
-// Menu
-document.getElementById('startGame').onclick=()=>{ document.getElementById('menu').style.display='none'; document.getElementById('gameContainer').style.display='flex'; };
-document.getElementById('openSettings').onclick=()=>{ document.getElementById('menu').style.display='none'; document.getElementById('settingsPanel').style.display='flex'; };
-document.getElementById('closeSettings').onclick=()=>{ document.getElementById('menu').style.display='flex'; document.getElementById('settingsPanel').style.display='none'; };
-document.getElementById('menuDayNight').addEventListener('change', e=>dayNight=e.target.value);
-document.getElementById('menuWind').addEventListener('input', e=>wind=+e.target.value);
-document.getElementById('menuRadar').addEventListener('change', e=>radarOn=e.target.value==='on');
-
-// Horizon
-function drawHorizon(){
-  hctx.clearRect(0,0,horizon.width,horizon.height);
-  hctx.fillStyle=dayNight==='day'?'#87CEEB':'#001033';
-  hctx.fillRect(0,0,horizon.width,horizon.height/2 + pitch*5);
-  hctx.fillStyle='#228B22';
-  hctx.fillRect(0,horizon.height/2 + pitch*5,horizon.width,horizon.height/2 - pitch*5);
-  hctx.strokeStyle='white'; hctx.lineWidth=2;
-  hctx.beginPath();
-  hctx.moveTo(horizon.width/2-15,horizon.height/2);
-  hctx.lineTo(horizon.width/2+15,horizon.height/2);
-  hctx.moveTo(horizon.width/2,horizon.height/2-7);
-  hctx.lineTo(horizon.width/2,horizon.height/2+7);
-  hctx.stroke();
-}
-
-// World
-function drawWorld(){
-  wctx.clearRect(0,0,world.width,world.height);
-  wctx.fillStyle=dayNight==='day'?'#87CEEB':'#000';
-  wctx.fillRect(0,0,world.width,world.height);
-  clouds.forEach(c=>{ c.x-=0.5+wind*0.1; if(c.x+c.w<0) c.x=world.width; wctx.fillStyle='white'; wctx.fillRect(c.x,c.y,c.w,c.h); });
-  buildings.forEach(b=>{ wctx.fillStyle='gray'; wctx.fillRect(b.x,b.y,b.w,b.h); });
-  wctx.fillStyle='red'; wctx.beginPath(); wctx.arc(world.width/2,world.height/2,5,0,2*Math.PI); wctx.fill();
-}
-
-// Radar
-function drawRadar(){
-  rctx.clearRect(0,0,radar.width,radar.height);
-  if(!radarOn) return;
-  rctx.fillStyle='black'; rctx.fillRect(0,0,radar.width,radar.height);
-  clouds.forEach(c=>{ const x=radar.width/2+(c.x-world.width/2)/4; const y=radar.height/2+(c.y-world.height/2)/4; rctx.fillStyle='white'; rctx.fillRect(x,y,2,2); });
-  buildings.forEach(b=>{ const x=radar.width/2+(b.x-world.width/2)/4; const y=radar.height/2+(b.y-world.height/2)/4; rctx.fillStyle='gray'; rctx.fillRect(x,y,2,2); });
-  rctx.fillStyle='red'; rctx.fillRect(radar.width/2-2,radar.height/2-2,4,4);
-}
-
-// Simulation
-function simulate(){
-  if(crashed)return;
-  // Physics
-  speed=throttle*1.5-flaps*0.5;
-  if(gear==='down') speed*=0.95;
-  altitude+=(speed/60)*Math.sin(pitch*Math.PI/180);
-  // Crash detection
-  if(altitude<=0){ crashed=true; alert("You crashed! Refresh to restart."); return; }
-  updateUI();
-  if(!fov){ drawHorizon(); drawWorld(); drawRadar(); }
-  else{ hctx.clearRect(0,0,horizon.width,horizon.height); wctx.clearRect(0,0,world.width,world.height); rctx.clearRect(0,0,radar.width,radar.height);}
-  requestAnimationFrame(simulate);
-}
-
-simulate();
 </script>
+
 </body>
 </html>
