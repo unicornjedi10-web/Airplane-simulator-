@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Flight Cockpit Game</title>
+<title>Full Flight Cockpit Game</title>
 <style>
   body, html { margin:0; padding:0; font-family:Arial,sans-serif; background:#000; overflow:hidden; }
   #gameContainer { display:flex; flex-direction:column; width:100vw; height:100vh; }
   #menu, #settingsPanel { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10; }
-  #menu button, #settingsPanel button, select { margin:10px; padding:10px 20px; font-size:16px; }
+  #menu button, #settingsPanel button, select { margin:10px; padding:10px 20px; font-size:16px; cursor:pointer; }
   #cockpitContainer { display:flex; flex:1; width:100%; flex-wrap:wrap; }
-  #controls, #settings, #info { flex:1 1 20%; min-width:180px; background:rgba(0,0,0,0.7); padding:10px; color:white; }
+  #controls, #settings, #info { flex:1 1 20%; min-width:180px; background:rgba(0,0,0,0.7); padding:10px; color:white; overflow-y:auto; max-height:100vh; }
   #instruments { flex:1 1 40%; text-align:center; min-width:250px; }
   canvas { display:block; margin:0 auto; border:1px solid #000; }
   h2 { margin:5px 0; }
@@ -21,25 +21,29 @@
 </head>
 <body>
 
+<!-- Start Menu -->
 <div id="menu">
   <h1>Flight Cockpit Game</h1>
   <button id="startGame">Start Flight</button>
   <button id="openSettings">Settings</button>
 </div>
 
+<!-- Settings Panel -->
 <div id="settingsPanel" style="display:none;">
   <h2>Settings</h2>
   <label>Day/Night Mode</label>
   <select id="menuDayNight"><option value="day">Day</option><option value="night">Night</option></select>
-  <label>Wind (0–20)</label>
+  <label>Wind (0–20 knots)</label>
   <input type="range" id="menuWind" min="0" max="20" value="0">
   <label>Radar</label>
   <select id="menuRadar"><option value="on">On</option><option value="off">Off</option></select>
   <button id="closeSettings">Back</button>
 </div>
 
+<!-- Game Container -->
 <div id="gameContainer" style="display:none;">
   <div id="cockpitContainer">
+    <!-- Controls -->
     <div id="controls">
       <h2>Flight Controls</h2>
       <label>Throttle <span id="throttleDisplay">0</span>%</label>
@@ -56,6 +60,7 @@
       <select id="fovMode"><option value="off">Off</option><option value="on">On</option></select>
     </div>
 
+    <!-- Instruments -->
     <div id="instruments">
       <h2>Instruments</h2>
       <canvas id="horizon" width="200" height="200"></canvas>
@@ -69,17 +74,18 @@
       </div>
     </div>
 
+    <!-- Info / Study Panel -->
     <div id="settings">
-      <h2>Info</h2>
+      <h2>Study Info</h2>
       <p id="studyInfo">Hover over controls for FAA guidance.</p>
     </div>
   </div>
 </div>
 
 <script>
-// Game state
-let throttle=0,flaps=0,pitch=0,bank=0,altitude=1000,speed=0,wind=0;
-let dayNight='day',radarOn=true,gear='up',fov=false,crashed=false;
+// Game State
+let throttle=0, flaps=0, pitch=0, bank=0, altitude=1000, speed=0;
+let wind=0, dayNight='day', radarOn=true, gear='up', fov=false, crashed=false;
 
 // World objects
 const buildings=Array.from({length:15},()=>({x:Math.random()*800,y:150+Math.random()*50,w:20+Math.random()*30,h:50+Math.random()*100}));
@@ -90,7 +96,7 @@ const studyData={
   throttle:"Throttle: Engine power. FAA PHAK Ch.4",
   flaps:"Flaps: Lift/Drag. FAA PHAK Ch.5",
   pitchControl:"Pitch: Nose up/down. FAA PHAK Ch.3",
-  bankControl:"Bank: Roll. FAA PHAK Ch.3",
+  bankControl:"Bank: Roll/turn. FAA PHAK Ch.3",
   gearControl:"Landing Gear: Drag. FAA PHAK Ch.5",
   fovMode:"FOV Mode: Night cockpit only.",
   menuDayNight:"Day/Night Mode. FAA PHAK Ch.9",
@@ -118,23 +124,27 @@ function updateUI(){
   document.getElementById('bank').innerText=bank;
 }
 
-// Event listeners
-[throttleEl,flapsEl,pitchEl,bankEl,gearEl,fovEl].forEach(el=>{
-  el.addEventListener('input',()=>{ throttle=+throttleEl.value; flaps=+flapsEl.value; pitch=+pitchEl.value; bank=+bankEl.value; updateUI(); });
-});
+// Control events
+throttleEl.addEventListener('input',()=>{ throttle=+throttleEl.value; updateUI(); });
+flapsEl.addEventListener('input',()=>{ flaps=+flapsEl.value; updateUI(); });
+pitchEl.addEventListener('input',()=>{ pitch=+pitchEl.value; updateUI(); });
+bankEl.addEventListener('input',()=>{ bank=+bankEl.value; updateUI(); });
 gearEl.addEventListener('change',()=>gear=gearEl.value);
 fovEl.addEventListener('change',()=>fov=fovEl.value==='on');
 
-// Hover info
+// Hover study info
 [throttleEl,flapsEl,pitchEl,bankEl,gearEl,fovEl].forEach(el=>{
   el.addEventListener('mouseover',()=>document.getElementById('studyInfo').innerText=studyData[el.id]||"Hover over controls for FAA info");
   el.addEventListener('mouseout',()=>document.getElementById('studyInfo').innerText="Hover over controls for FAA guidance");
 });
 
-// Start menu
+// Menu
 document.getElementById('startGame').onclick=()=>{ document.getElementById('menu').style.display='none'; document.getElementById('gameContainer').style.display='flex'; };
 document.getElementById('openSettings').onclick=()=>{ document.getElementById('menu').style.display='none'; document.getElementById('settingsPanel').style.display='flex'; };
 document.getElementById('closeSettings').onclick=()=>{ document.getElementById('menu').style.display='flex'; document.getElementById('settingsPanel').style.display='none'; };
+document.getElementById('menuDayNight').addEventListener('change', e=>dayNight=e.target.value);
+document.getElementById('menuWind').addEventListener('input', e=>wind=+e.target.value);
+document.getElementById('menuRadar').addEventListener('change', e=>radarOn=e.target.value==='on');
 
 // Horizon
 function drawHorizon(){
@@ -157,7 +167,7 @@ function drawWorld(){
   wctx.clearRect(0,0,world.width,world.height);
   wctx.fillStyle=dayNight==='day'?'#87CEEB':'#000';
   wctx.fillRect(0,0,world.width,world.height);
-  clouds.forEach(c=>{ c.x-=0.5+wind*0.1;if(c.x+c.w<0)c.x=world.width; wctx.fillStyle='white'; wctx.fillRect(c.x,c.y,c.w,c.h); });
+  clouds.forEach(c=>{ c.x-=0.5+wind*0.1; if(c.x+c.w<0) c.x=world.width; wctx.fillStyle='white'; wctx.fillRect(c.x,c.y,c.w,c.h); });
   buildings.forEach(b=>{ wctx.fillStyle='gray'; wctx.fillRect(b.x,b.y,b.w,b.h); });
   wctx.fillStyle='red'; wctx.beginPath(); wctx.arc(world.width/2,world.height/2,5,0,2*Math.PI); wctx.fill();
 }
@@ -175,9 +185,11 @@ function drawRadar(){
 // Simulation
 function simulate(){
   if(crashed)return;
+  // Physics
   speed=throttle*1.5-flaps*0.5;
   if(gear==='down') speed*=0.95;
   altitude+=(speed/60)*Math.sin(pitch*Math.PI/180);
+  // Crash detection
   if(altitude<=0){ crashed=true; alert("You crashed! Refresh to restart."); return; }
   updateUI();
   if(!fov){ drawHorizon(); drawWorld(); drawRadar(); }
